@@ -68,7 +68,7 @@
 
 <script>
 const tg=window.Telegram?.WebApp;if(tg){tg.ready();tg.expand();try{tg.setHeaderColor('#07101c');tg.setBackgroundColor('#07101c')}catch(e){}}
-const cloud=tg?.CloudStorage;const OLD_KEY='work_hours_data_v2',SETTINGS='work_hours_settings_v2',META='work_hours_meta_v3',MONTH_PREFIX='work_hours_month_v3_',INITIAL_IMPORT='work_hours_initial_import_v1';
+const cloud=tg?.CloudStorage;const OLD_KEY='work_hours_data_v2',SETTINGS='work_hours_settings_v2',META='work_hours_meta_v3',MONTH_PREFIX='work_hours_month_v3_',INITIAL_IMPORT='work_hours_initial_import_v2';
 let data={entries:[]},settings={salary:0,divider:13.90,rate:13},view=new Date();view.setDate(1);
 const $=id=>document.getElementById(id),pad=n=>String(n).padStart(2,'0'),monthKey=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}`;const todayKey=()=>{const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`};const minutes=v=>{const p=String(v||'00:00').split(':').map(Number);return(p[0]||0)*60+(p[1]||0)},hm=m=>{m=Math.max(0,Math.round(m));return`${pad(Math.floor(m/60))}:${pad(m%60)}`};const net=e=>{let a=minutes(e.start),b=minutes(e.end);if(b<a)b+=1440;return Math.max(0,b-a-Number(e.pause||0))};const makeId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 function toast(t){$('toast').textContent=t;$('toast').style.display='block';clearTimeout(window._toast);window._toast=setTimeout(()=>$('toast').style.display='none',2200)}function esc(x){return String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function monthEntries(){return data.entries.filter(e=>e.date?.startsWith(monthKey(view))).sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start))}function summary(es){const total=es.reduce((s,e)=>s+net(e),0);const companyHours=Math.max(0,Number(settings.salary)||0)/Math.max(.01,Number(settings.divider)||13.9);const remaining=Math.max(0,total/60-companyHours);return{total,companyHours,remaining,cash:remaining*(Number(settings.rate)||13)}}
@@ -92,15 +92,20 @@ $('monthReportTab').onclick=()=>{};$('weekReportTab').onclick=()=>{const d=new D
 const INITIAL_ENTRIES=[{date:'2026-08-01',workplace:'bochum station',start:'13:30',end:'18:30',pause:0},{date:'2026-08-02',workplace:'HOTEL HSK',start:'09:00',end:'18:30',pause:30},{date:'2026-08-07',workplace:'bochum',start:'17:30',end:'23:00',pause:0},{date:'2026-08-08',workplace:'leverkusen',start:'13:00',end:'18:00',pause:0},{date:'2026-08-10',workplace:'Hotel',start:'08:45',end:'16:45',pause:30},{date:'2026-08-11',workplace:'Schwing Verkehrslenkung',start:'17:00',end:'01:00',pause:0},{date:'2026-08-14',workplace:'Schwing Verkehrslenkung',start:'18:00',end:'03:00',pause:0},{date:'2026-08-15',workplace:'merkur spiel arena',start:'12:00',end:'16:50',pause:0},{date:'2026-08-16',workplace:'Schwing Verkehrslenkung',start:'16:30',end:'00:00',pause:0},{date:'2026-08-21',workplace:'duisburg',start:'19:00',end:'01:00',pause:0},{date:'2026-08-23',workplace:'essen stadion',start:'16:00',end:'20:30',pause:0},{date:'2026-08-25',workplace:'HOTEL-HSK',start:'08:00',end:'16:30',pause:30},{date:'2026-08-26',workplace:'Hotel meeting',start:'14:00',end:'17:30',pause:0},{date:'2026-08-28',workplace:'Bochum stadion',start:'15:30',end:'21:00',pause:0},{date:'2026-08-29',workplace:'Dortmund Stadion',start:'08:00',end:'12:00',pause:0},{date:'2026-08-29',workplace:'Waltroper Parkfest-Kassen Dienste',start:'15:00',end:'01:22',pause:0},{date:'2026-09-02',workplace:'HOTEL HSK',start:'08:00',end:'16:30',pause:30},{date:'2026-09-03',workplace:'HOTEL HSK',start:'08:00',end:'16:30',pause:30},{date:'2026-09-04',workplace:'HOTEL HSK',start:'08:00',end:'16:30',pause:30},{date:'2026-09-05',workplace:'HOTEL HSK',start:'09:00',end:'17:30',pause:30},{date:'2026-09-06',workplace:'HOTEL HSK',start:'09:00',end:'17:30',pause:30},{date:'2026-09-07',workplace:'HOTEL HSK',start:'08:00',end:'17:15',pause:30},{date:'2026-09-08',workplace:'HOTEL HSK',start:'08:00',end:'16:30',pause:30},{date:'2026-09-11',workplace:'HOTEL HSK',start:'08:00',end:'16:30',pause:30},{date:'2026-09-12',workplace:'Dortmund stadion',start:'12:30',end:'18:00',pause:0},{date:'2026-09-13',workplace:'HOTEL Hsk',start:'09:00',end:'17:50',pause:30}].map(e=>({...e,id:makeId()}));
 async function seedInitialEntriesIfNeeded(){
   try{
-    const flag=(await cloudGet([INITIAL_IMPORT]))[INITIAL_IMPORT];
-    if(flag==='done') return;
+    // Migration v2: merge the shifts from the user's original image exactly once.
+    // Do not rely on the old v1 flag, because an earlier build could have marked it done
+    // before the 27 entries were actually written.
     const existing=new Set(data.entries.map(e=>[e.date,e.workplace,e.start,e.end,Number(e.pause||0)].join('|')));
     const missing=INITIAL_ENTRIES.filter(e=>!existing.has([e.date,e.workplace,e.start,e.end,Number(e.pause||0)].join('|')));
-    if(missing.length){data.entries.push(...missing);await saveAll();}
+    if(missing.length){
+      data.entries.push(...missing);
+      await saveAll();
+    }
     await cloudSet(INITIAL_IMPORT,'done');
-    const latest=new Date();view=new Date(latest.getFullYear(),latest.getMonth(),1);
-    toast(missing.length?`اطلاعات ${missing.length} شیفت از تصویر وارد شد ✅`:'اطلاعات تصویر قبلاً وارد شده است ✅');
-  }catch(e){console.warn('initial import',e)}
+    const latest=new Date();
+    view=new Date(latest.getFullYear(),latest.getMonth(),1);
+    toast(missing.length?`اطلاعات ${missing.length} شیفت از تصویر وارد شد ✅`:'اطلاعات تصویر از قبل موجود است ✅');
+  }catch(e){console.warn('initial import',e);toast('وارد کردن شیفت‌های تصویر انجام نشد؛ دوباره برنامه را باز کن.');}
 }
 loadAll().then(async()=>{await seedInitialEntriesIfNeeded();render()});
 </script>
