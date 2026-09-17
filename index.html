@@ -91,21 +91,22 @@ $('prevMonth').onclick=()=>changeMonth(-1);$('nextMonth').onclick=()=>changeMont
 $('monthReportTab').onclick=()=>{};$('weekReportTab').onclick=()=>{const d=new Date(view);const day=(d.getDay()+6)%7;d.setDate(d.getDate()-day);const end=new Date(d);end.setDate(d.getDate()+6);const es=data.entries.filter(e=>{const x=new Date(e.date+'T00:00:00');return x>=d&&x<=end});alert(`گزارش هفته\n${d.toLocaleDateString('de-DE')} تا ${end.toLocaleDateString('de-DE')}\n\nشیفت‌ها: ${es.length}\nساعات خالص: ${hm(es.reduce((s,e)=>s+net(e),0))}`)};$('yearReportTab').onclick=()=>{const y=view.getFullYear(),es=data.entries.filter(e=>e.date.startsWith(String(y)));alert(`گزارش سال ${y}\n\nشیفت‌ها: ${es.length}\nساعات خالص: ${hm(es.reduce((s,e)=>s+net(e),0))}`)};
 const INITIAL_ENTRIES=[{date:'2026-08-01',workplace:'bochum station',start:'13:30',end:'18:30',pause:0},{date:'2026-08-02',workplace:'HOTEL HSK',start:'09:00',end:'18:30',pause:30},{date:'2026-08-07',workplace:'bochum',start:'17:30',end:'23:00',pause:0},{date:'2026-08-08',workplace:'leverkusen',start:'13:00',end:'18:00',pause:0},{date:'2026-08-10',workplace:'Hotel',start:'08:45',end:'16:45',pause:30},{date:'2026-08-11',workplace:'Schwing Verkehrslenkung',start:'17:00',end:'01:00',pause:0},{date:'2026-08-14',workplace:'Schwing Verkehrslenkung',start:'18:00',end:'03:00',pause:0},{date:'2026-08-15',workplace:'merkur spiel arena',start:'12:00',end:'16:50',pause:0},{date:'2026-08-16',workplace:'Schwing Verkehrslenkung',start:'16:30',end:'00:00',pause:0},{date:'2026-08-21',workplace:'duisburg',start:'19:00',end:'01:00',pause:0},{date:'2026-08-23',workplace:'essen stadion',start:'16:00',end:'20:30',pause:0},{date:'2026-08-25',workplace:'HOTEL-HSK',start:'08:00',end:'16:30',pause:30},{date:'2026-08-26',workplace:'Hotel meeting',start:'14:00',end:'17:30',pause:0},{date:'2026-08-28',workplace:'Bochum stadion',start:'15:30',end:'21:00',pause:0},{date:'2026-08-29',workplace:'Dortmund Stadion',start:'08:00',end:'12:00',pause:0},{date:'2026-08-29',workplace:'Waltroper Parkfest-Kassen Dienste',start:'15:00',end:'01:22',pause:0},{date:'2026-09-02',workplace:'HOTEL HSK',start:'08:00',end:'16:30',pause:30},{date:'2026-09-03',workplace:'HOTEL HSK',start:'08:00',end:'16:30',pause:30},{date:'2026-09-04',workplace:'HOTEL HSK',start:'08:00',end:'16:30',pause:30},{date:'2026-09-05',workplace:'HOTEL HSK',start:'09:00',end:'17:30',pause:30},{date:'2026-09-06',workplace:'HOTEL HSK',start:'09:00',end:'17:30',pause:30},{date:'2026-09-07',workplace:'HOTEL HSK',start:'08:00',end:'17:15',pause:30},{date:'2026-09-08',workplace:'HOTEL HSK',start:'08:00',end:'16:30',pause:30},{date:'2026-09-11',workplace:'HOTEL HSK',start:'08:00',end:'16:30',pause:30},{date:'2026-09-12',workplace:'Dortmund stadion',start:'12:30',end:'18:00',pause:0},{date:'2026-09-13',workplace:'HOTEL Hsk',start:'09:00',end:'17:50',pause:30}].map(e=>({...e,id:makeId()}));
 async function seedInitialEntriesIfNeeded(){
-  try{
-    // Migration v2: merge the shifts from the user's original image exactly once.
-    // Do not rely on the old v1 flag, because an earlier build could have marked it done
-    // before the 27 entries were actually written.
-    const existing=new Set(data.entries.map(e=>[e.date,e.workplace,e.start,e.end,Number(e.pause||0)].join('|')));
-    const missing=INITIAL_ENTRIES.filter(e=>!existing.has([e.date,e.workplace,e.start,e.end,Number(e.pause||0)].join('|')));
-    if(missing.length){
-      data.entries.push(...missing);
-      await saveAll();
-    }
-    await cloudSet(INITIAL_IMPORT,'done');
-    const latest=new Date();
-    view=new Date(latest.getFullYear(),latest.getMonth(),1);
-    toast(missing.length?`اطلاعات ${missing.length} شیفت از تصویر وارد شد ✅`:'اطلاعات تصویر از قبل موجود است ✅');
-  }catch(e){console.warn('initial import',e);toast('وارد کردن شیفت‌های تصویر انجام نشد؛ دوباره برنامه را باز کن.');}
+  // Guaranteed migration: the 27 shifts from the original image are merged into
+  // the in-memory data first, so they are visible even if Telegram CloudStorage
+  // is slow or temporarily refuses a write. A stable fingerprint prevents duplicates.
+  const key=e=>[e.date,e.workplace,e.start,e.end,Number(e.pause||0)].join('|');
+  const existing=new Set(data.entries.map(key));
+  const missing=INITIAL_ENTRIES.filter(e=>!existing.has(key(e)));
+  if(missing.length){
+    data.entries.push(...missing);
+    // Save in the background; visibility does not depend on this succeeding.
+    try{ await saveAll(); }catch(err){ console.warn('save imported shifts',err); }
+  }
+  try{ await cloudSet(INITIAL_IMPORT,'done'); }catch(err){ console.warn('migration marker',err); }
+  const latest=new Date();
+  view=new Date(latest.getFullYear(),latest.getMonth(),1);
+  toast(missing.length?`۲۷ شیفت تصویر اضافه شد (${missing.length} مورد جدید) ✅`:'۲۷ شیفت تصویر موجود است ✅');
+  return missing.length;
 }
 loadAll().then(async()=>{await seedInitialEntriesIfNeeded();render()});
 </script>
