@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Work Hours</title>
+<script src="https://telegram.org/js/telegram-web-app.js?63"></script>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:light dark}
+*{box-sizing:border-box}body{margin:0;background:var(--tg-theme-bg-color,#f2f2f7);color:var(--tg-theme-text-color,#111)}
+main{max-width:760px;margin:auto;padding:14px 14px 30px}.card{background:var(--tg-theme-secondary-bg-color,#fff);border-radius:18px;padding:16px;margin-bottom:12px}
+h1,h2,h3,p{margin-top:0}.muted{opacity:.65;font-size:13px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label{display:block;font-size:13px;opacity:.7;margin-bottom:5px}
+input{width:100%;min-height:46px;padding:9px 11px;border-radius:12px;border:1px solid #c8c8cc;background:var(--tg-theme-bg-color,#f2f2f7);color:inherit;font-size:16px}
+button{min-height:44px;border:0;border-radius:12px;padding:9px 13px;background:var(--tg-theme-button-color,#2481cc);color:var(--tg-theme-button-text-color,#fff);font-weight:700;font-size:14px}
+button.secondary{background:transparent;color:inherit;border:1px solid #aaa}.danger{color:#b42318!important}
+.actions{display:flex;gap:8px;flex-wrap:wrap}.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{background:var(--tg-theme-bg-color,#f2f2f7);border-radius:14px;padding:12px}.stat span{display:block;font-size:12px;opacity:.65}.stat b{font-size:21px}
+.table{overflow:auto}.table table{width:100%;border-collapse:collapse;font-size:12px}.table th,.table td{padding:8px 5px;border-bottom:1px solid #ccc;text-align:right;white-space:nowrap}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px}.entry-actions{display:flex;gap:5px}.entry-actions button{min-height:38px;padding:6px 9px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:20}.modal.open{display:flex}
+.sheet{width:100%;max-width:760px;background:var(--tg-theme-bg-color,#f2f2f7);border-radius:22px 22px 0 0;padding:18px;max-height:90vh;overflow:auto}
+.toast{position:fixed;left:12px;right:12px;bottom:16px;background:#222;color:#fff;padding:11px 14px;border-radius:12px;display:none;z-index:30}
+@media(max-width:430px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}}
+@media print{body{background:white;color:black}.no-print{display:none!important}.card{box-shadow:none;border:1px solid #ddd}main{max-width:none}}
+</style>
+</head>
+<body>
+<main>
+<section class="card">
+  <div class="row">
+    <div><h1>⏱️ Work Hours</h1><p class="muted">ساعات کاری و محاسبه حقوق</p></div>
+    <button id="settingsBtn" class="secondary">⚙️ تنظیمات</button>
+  </div>
+</section>
+
+<section class="card">
+  <div class="row">
+    <button id="prevMonth" class="secondary">‹</button>
+    <strong id="monthTitle"></strong>
+    <button id="nextMonth" class="secondary">›</button>
+  </div>
+  <div class="actions no-print" style="margin-top:12px">
+    <button id="todayBtn">ماه جاری</button>
+    <button id="addBtn">＋ ثبت شیفت</button>
+    <button id="pdfBtn">📄 PDF ماه</button>
+  </div>
+</section>
+
+<section class="card">
+  <h2>خلاصه ماه</h2>
+  <div class="stats">
+    <div class="stat"><span>کل ساعات خالص</span><b id="total">00:00</b></div>
+    <div class="stat"><span>ساعت پرداختی شرکت</span><b id="company">0:00</b></div>
+    <div class="stat"><span>ساعت باقی‌مانده</span><b id="remaining">0:00</b></div>
+    <div class="stat"><span>دریافتی نقدی</span><b id="cash">€0.00</b></div>
+  </div>
+</section>
+
+<section class="card">
+  <div class="row"><h2>شیفت‌های این ماه</h2><span id="count" class="muted"></span></div>
+  <div class="table">
+    <table><thead><tr><th>تاریخ</th><th>محل</th><th>زمان</th><th>Pause</th><th>خالص</th><th>ویرایش</th></tr></thead>
+    <tbody id="rows"></tbody></table>
+  </div>
+</section>
+
+<section class="card">
+  <h2>گزارش‌ها</h2>
+  <div class="actions">
+    <button id="weekBtn" class="secondary">گزارش هفته</button>
+    <button id="yearBtn" class="secondary">گزارش سال</button>
+  </div>
+  <p id="reportText" class="muted" style="margin-top:10px"></p>
+</section>
+</main>
+
+<div id="modal" class="modal">
+ <div class="sheet">
+  <div class="row"><h2 id="formTitle">ثبت شیفت</h2><button id="closeModal" class="secondary">بستن</button></div>
+  <form id="shiftForm">
+   <input type="hidden" id="editId">
+   <div class="grid">
+    <div><label>تاریخ</label><input id="fDate" type="date" required></div>
+    <div><label>محل کار</label><input id="fWorkplace" required placeholder="مثلاً Hotel A"></div>
+    <div><label>شروع</label><input id="fStart" type="time" required></div>
+    <div><label>پایان</label><input id="fEnd" type="time" required></div>
+    <div><label>Pause (دقیقه)</label><input id="fPause" type="number" min="0" max="1440" value="0"></div>
+   </div>
+   <div class="actions" style="margin-top:14px">
+    <button type="submit">ذخیره</button><button id="deleteFromForm" type="button" class="secondary danger">حذف شیفت</button>
+   </div>
+   <p id="formMsg" class="muted" style="margin-top:10px"></p>
+  </form>
+ </div>
+</div>
+
+<div id="settingsModal" class="modal">
+ <div class="sheet">
+  <div class="row"><h2>تنظیمات حقوق</h2><button id="closeSettings" class="secondary">بستن</button></div>
+  <div class="grid">
+   <div><label>مبلغ حقوق شرکت (€)</label><input id="salary" type="number" min="0" step="0.01"></div>
+   <div><label>تقسیم بر</label><input id="divider" type="number" min="0.01" step="0.01" value="13.90"></div>
+   <div><label>ضریب ساعت نقدی</label><input id="rate" type="number" min="0" step="0.01" value="13"></div>
+  </div>
+  <button id="saveSettings" style="width:100%;margin-top:14px">ذخیره تنظیمات</button>
+ </div>
+</div>
+<div id="toast" class="toast"></div>
+
+<script>
+(() => {
+const tg=window.Telegram?.WebApp;
+if(tg){tg.ready();tg.expand();try{tg.setHeaderColor('secondary_bg_color')}catch(e){}}
+const cloud=tg?.CloudStorage;
+const KEY='work_hours_data_v2';
+const SETTINGS='work_hours_settings_v2';
+let data={entries:[]};
+let settings={salary:0,divider:13.90,rate:13};
+let view=new Date(); view.setDate(1);
+
+const $=id=>document.getElementById(id);
+const pad=n=>String(n).padStart(2,'0');
+const key=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}`;
+const todayKey=()=>{const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`};
+const minutes=v=>{const p=String(v||'00:00').split(':').map(Number);return (p[0]||0)*60+(p[1]||0)};
+const hm=m=>{m=Math.max(0,Math.round(m));return `${pad(Math.floor(m/60))}:${pad(m%60)}`};
+const net=e=>{let a=minutes(e.start),b=minutes(e.end);if(b<a)b+=1440;return Math.max(0,b-a-Number(e.pause||0))};
+const id=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+function toast(t){$('toast').textContent=t;$('toast').style.display='block';setTimeout(()=>$('toast').style.display='none',1800)}
+function saveCloud(){
+  const value=JSON.stringify(data);
+  const svalue=JSON.stringify(settings);
+  if(!cloud){localStorage.setItem(KEY,value);localStorage.setItem(SETTINGS,svalue);return Promise.resolve();}
+  return new Promise((resolve,reject)=>{
+    cloud.setItem(KEY,value,(err)=>{if(err)return reject(err);
+      cloud.setItem(SETTINGS,svalue,(err2)=>err2?reject(err2):resolve());
+    });
+  });
+}
+function loadCloud(){
+  if(!cloud){
+    try{data=JSON.parse(localStorage.getItem(KEY)||'{"entries":[]}');settings=JSON.parse(localStorage.getItem(SETTINGS)||'{"salary":0,"divider":13.9,"rate":13}')}catch(e){}
+    return Promise.resolve();
+  }
+  return new Promise(resolve=>{
+    cloud.getItems([KEY,SETTINGS],(err,items)=>{
+      if(!err&&items){try{if(items[KEY])data=JSON.parse(items[KEY]);if(items[SETTINGS])settings=JSON.parse(items[SETTINGS])}catch(e){}}
+      resolve();
+    });
+  });
+}
+function monthEntries(){return data.entries.filter(e=>e.date.startsWith(key(view))).sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start))}
+function summary(es){
+  const total=es.reduce((s,e)=>s+net(e),0);
+  const companyHours=Math.max(0,Number(settings.salary)||0)/Math.max(.01,Number(settings.divider)||13.9);
+  const remaining=Math.max(0,total/60-companyHours);
+  return {total,companyHours,remaining,cash:remaining*(Number(settings.rate)||13)};
+}
+function render(){
+  $('monthTitle').textContent=view.toLocaleDateString('de-DE',{month:'long',year:'numeric'});
+  const es=monthEntries(), s=summary(es);
+  $('total').textContent=hm(s.total);
+  $('company').textContent=hm(s.companyHours*60);
+  $('remaining').textContent=hm(s.remaining*60);
+  $('cash').textContent='€'+s.cash.toFixed(2);
+  $('count').textContent=`${es.length} شیفت`;
+  $('rows').innerHTML=es.length?es.map(e=>`<tr>
+    <td>${e.date}</td><td>${esc(e.workplace)}</td><td>${e.start}–${e.end}</td><td>${hm(e.pause||0)}</td><td><b>${hm(net(e))}</b></td>
+    <td><div class="entry-actions"><button class="secondary edit" data-id="${e.id}">✏️</button><button class="secondary danger del" data-id="${e.id}">🗑️</button></div></td>
+  </tr>`).join(''):`<tr><td colspan="6" class="muted">هنوز شیفت ثبت نشده.</td></tr>`;
+  document.querySelectorAll('.edit').forEach(b=>b.onclick=()=>openEdit(b.dataset.id));
+  document.querySelectorAll('.del').forEach(b=>b.onclick=()=>removeEntry(b.dataset.id));
+  const now=new Date(); const sameYear=view.getFullYear()===now.getFullYear();
+  $('reportText').textContent=`سال ${view.getFullYear()}: ${sameYear?'ماه جاری در حال نمایش است.':'برای دیدن ماه دیگر از فلش‌ها استفاده کن.'}`;
+}
+function esc(x){return String(x).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]))}
+function openNew(){
+  $('formTitle').textContent='ثبت شیفت';$('editId').value='';
+  $('fDate').value=todayKey();$('fWorkplace').value='';$('fStart').value='';$('fEnd').value='';$('fPause').value='0';$('deleteFromForm').style.display='none';$('formMsg').textContent='';
+  $('modal').classList.add('open');
+}
+function openEdit(entryId){
+  const e=data.entries.find(x=>x.id===entryId);if(!e)return;
+  $('formTitle').textContent='ویرایش شیفت';$('editId').value=e.id;$('fDate').value=e.date;$('fWorkplace').value=e.workplace;$('fStart').value=e.start;$('fEnd').value=e.end;$('fPause').value=e.pause||0;$('deleteFromForm').style.display='inline-block';$('formMsg').textContent='';
+  $('modal').classList.add('open');
+}
+async function removeEntry(entryId){
+  if(!confirm('این شیفت حذف شود؟'))return;
+  data.entries=data.entries.filter(e=>e.id!==entryId);await saveCloud();render();toast('شیفت حذف شد');
+  $('modal').classList.remove('open');
+}
+$('addBtn').onclick=openNew;
+$('closeModal').onclick=()=>$('modal').classList.remove('open');
+$('deleteFromForm').onclick=()=>{const id=$('editId').value;if(id)removeEntry(id)};
+$('shiftForm').onsubmit=async ev=>{
+ ev.preventDefault(); const date=$('fDate').value, workplace=$('fWorkplace').value.trim(), start=$('fStart').value,end=$('fEnd').value,pause=Math.max(0,Number($('fPause').value||0));
+ if(!date||!workplace||!start||!end){$('formMsg').textContent='لطفاً همه اطلاعات را وارد کن.';return}
+ const item={id:$('editId').value||id(),date,workplace,start,end,pause};
+ if(net(item)<=0){$('formMsg').textContent='ساعت خالص باید بیشتر از صفر باشد.';return}
+ const idx=data.entries.findIndex(x=>x.id===item.id);
+ if(idx>=0)data.entries[idx]=item;else data.entries.push(item);
+ await saveCloud();view=new Date(date+'T00:00:00');view.setDate(1);$('modal').classList.remove('open');render();toast(idx>=0?'شیفت اصلاح شد':'شیفت ثبت شد');
+};
+$('prevMonth').onclick=()=>{view.setMonth(view.getMonth()-1);render()};
+$('nextMonth').onclick=()=>{view.setMonth(view.getMonth()+1);render()};
+$('todayBtn').onclick=()=>{const d=new Date();view=new Date(d.getFullYear(),d.getMonth(),1);render()};
+$('settingsBtn').onclick=()=>{$('salary').value=settings.salary;$('divider').value=settings.divider;$('rate').value=settings.rate;$('settingsModal').classList.add('open')};
+$('closeSettings').onclick=()=>$('settingsModal').classList.remove('open');
+$('saveSettings').onclick=async()=>{settings={salary:Math.max(0,Number($('salary').value||0)),divider:Math.max(.01,Number($('divider').value||13.9)),rate:Math.max(0,Number($('rate').value||13))};await saveCloud();$('settingsModal').classList.remove('open');render();toast('تنظیمات ذخیره شد')};
+$('weekBtn').onclick=()=>{
+ const d=new Date(view);const day=(d.getDay()+6)%7;d.setDate(d.getDate()-day);
+ const end=new Date(d);end.setDate(d.getDate()+6);
+ const es=data.entries.filter(e=>{const x=new Date(e.date+'T00:00:00');return x>=d&&x<=end});
+ const total=es.reduce((s,e)=>s+net(e),0);alert(`گزارش هفته\\n${d.toLocaleDateString('de-DE')} تا ${end.toLocaleDateString('de-DE')}\\n\\nشیفت‌ها: ${es.length}\\nساعات خالص: ${hm(total)}`);
+};
+$('yearBtn').onclick=()=>{
+ const y=view.getFullYear();const es=data.entries.filter(e=>e.date.startsWith(String(y)));
+ const total=es.reduce((s,e)=>s+net(e),0);alert(`گزارش سال ${y}\\n\\nشیفت‌ها: ${es.length}\\nساعات خالص: ${hm(total)}`);
+};
+$('pdfBtn').onclick=()=>{
+ const es=monthEntries(),s=summary(es);
+ const rows=es.map(e=>`<tr><td>${e.date}</td><td>${esc(e.workplace)}</td><td>${e.start}</td><td>${e.end}</td><td>${hm(e.pause||0)}</td><td>${hm(net(e))}</td></tr>`).join('');
+ const w=window.open('','_blank'); if(!w){toast('باز کردن صفحه PDF توسط Telegram مسدود شد.');return}
+ w.document.write(`<html dir="rtl"><head><meta charset="utf-8"><title>Work Hours</title><style>body{font-family:Arial;padding:30px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #aaa;padding:7px}h1{font-size:22px}</style></head><body><h1>گزارش ساعات کاری — ${view.toLocaleDateString('de-DE',{month:'long',year:'numeric'})}</h1><table><thead><tr><th>تاریخ</th><th>محل کار</th><th>شروع</th><th>پایان</th><th>Pause</th><th>خالص</th></tr></thead><tbody>${rows}</tbody></table><h3>جمع ساعات: ${hm(s.total)}</h3><p>ساعت پرداختی شرکت: ${hm(s.companyHours*60)}</p><p>ساعت باقی‌مانده: ${hm(s.remaining*60)}</p><p>دریافتی نقدی: €${s.cash.toFixed(2)}</p><script>setTimeout(()=>window.print(),300)<\\/script></body></html>`);w.document.close();
+};
+loadCloud().then(render);
+})();
+</script>
+</body>
+</html>
